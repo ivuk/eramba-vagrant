@@ -1,0 +1,96 @@
+---
+- hosts: all
+  sudo: yes
+  tasks:
+    - name: Install prerequisite packages
+      yum: name={{ item }} state=latest
+      with_items:
+        - httpd
+        - php
+        - mysql-server
+        - unzip
+        - php-pdo
+        - php-mysql
+        - MySQL-python #  This is required for the Ansible mysql_* modules
+        - libselinux-python #  This is required for the Ansible template module
+    - name: Extract the downloaded Eramba archive
+      unarchive: src=/vagrant/eramba_v2.zip dest=/var/www/html/ copy=no
+    - name: Start the MySQL service and make sure it's enabled on boot
+      service: name=mysqld state=started enabled=yes
+    - name: Delete anonymous MySQL user
+      mysql_user: name="" host={{ item }} state=absent
+      with_items:
+        - localhost
+        - "{{ ansible_nodename }}"
+    - name: Remove the MySQL 'test' database
+      mysql_db: db=test state=absent
+    - name: Change the 'root' login credentials
+      mysql_user: name=root
+                  password="{{ mysql_root_password }}"
+                  priv=*.*:ALL,GRANT
+                  host={{ item }}
+      with_items:
+        - "{{ ansible_nodename }}"
+        - 127.0.0.1
+        - ::1
+        - localhost
+    - name: Copy my.cnf file to /root/.my.cnf so we can re-provision properly
+      template: src=templates/my.cnf.j2 dest=/root/.my.cnf owner=root group=root mode=0600
+    - name: Create the Eramba MySQL database
+      mysql_db: name="{{ eramba_db }}" state=present
+      notify:
+        - Import the MySQL dump into {{ eramba_db }}
+    - name: Create the Eramba MySQL user ('localhost' only)
+      mysql_user: name="{{ eramba_db_user }}"
+                  password="{{ eramba_db_password }}"
+                  priv="{{ eramba_db }}".*:ALL
+                  host=localhost
+                  state=present
+    - name: Update the database.php config ('host' value)
+      replace: dest=/var/www/html/eramba_v2/app/Config/database.php
+               regexp="'host' => '',"
+               replace="'host' => 'localhost',"
+    - name: Update the database.php config ('login' value)
+      replace: dest=/var/www/html/eramba_v2/app/Config/database.php
+               regexp="'login' => '',"
+               replace="'login' => '{{ eramba_db_user }}',"
+    - name: Update the database.php config ('password' value)
+      replace: dest=/var/www/html/eramba_v2/app/Config/database.php
+               regexp="'password' => '',"
+               replace="'password' => '{{ eramba_db_password }}',"
+    - name: Update the database.php config ('database' value)
+      replace: dest=/var/www/html/eramba_v2/app/Config/database.php
+               regexp="'database' => '',"
+               replace="'database' => '{{ eramba_db }}',"
+    - name: Recursively set the permissions on app/tmp and app/webroot/files directories
+      shell: >
+        chgrp -R apache /var/www/html/eramba_v2/app/tmp/ &&
+        chmod -R g+w /var/www/html/eramba_v2/app/tmp/ &&
+        chgrp -R apache /var/www/html/eramba_v2/app/webroot/files/ &&
+        chmod -R g+w /var/www/html/eramba_v2/app/webroot/files/
+    - name: Set the PHP timezone in /etc/php.ini
+      lineinfile: dest=/etc/php.ini
+                  regexp="^;date.timezone"
+                  insertafter=";date.timezone ="
+                  line='date.timezone = "{{ timezone }}"'
+    - name: Copy the eramba-http Apache virtual host configuration to /etc/httpd/conf.d directory
+      copy: src=files/eramba-http.conf dest=/etc/httpd/conf.d/eramba-http.conf owner=root group=root mode=0644
+    - name: Start the Apache HTTPD service and make sure it is enabled on boot
+      service: name=httpd state=started enabled=yes
+    - name: Register the {{ security_key }} variable needed for cron tasks
+      shell: >
+        awk -F \'
+        '/CRON_SECURITY_KEY/ { print $4 }'
+        /var/www/html/eramba_v2/app/Config/settings.php
+      register: security_key
+    - name: Add the required daily cron tasks
+      template: src=templates/eramba-cron.j2 dest=/etc/cron.daily/eramba-cron owner=root group=root mode=0755
+    - name: Add the required yearly cron tasks
+      cron: name="Create required audits"
+            special_time=yearly
+            job="wget -q -O /dev/null http://{{ ansible_nodename }}/securityServices/updateAudits/{{ security_key.stdout }}"
+  handlers:
+    - name: Import the MySQL dump into {{ eramba_db }}
+      mysql_db: name="{{ eramba_db }}"
+                state=import
+                target=/var/www/html/eramba_v2/app/Config/db_schema/default_mysql_schema_211.sql
