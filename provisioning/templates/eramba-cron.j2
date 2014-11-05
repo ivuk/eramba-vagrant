@@ -1,0 +1,7 @@
+#!/bin/bash
+
+wget -q -O /dev/null http://{{ ansible_nodename }}/awareness/runCron/{{ security_key.stdout }}
+wget -q -O /dev/null http://{{ ansible_nodename }}/businessContinuityPlans/runCron/{{ security_key.stdout }}
+wget -q -O /dev/null http://{{ ansible_nodename }}/mailer/run/{{ security_key.stdout }}
+wget -q -O /dev/null http://{{ ansible_nodename }}/policyExceptions/checkPolicyException/{{ security_key.stdout }}
+wget -q -O /dev/null http://{{ ansible_nodename }}/reports/updateOvertimeCharts/{{ security_key.stdout }}
