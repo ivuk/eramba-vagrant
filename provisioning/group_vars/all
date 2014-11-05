@@ -1,6 +1,6 @@
 ---
 mysql_root_password: ididnotreadtheinstructions
-eramba_db_user: ididnotreadtheinstructions
+eramba_db_user: ididnotread
 eramba_db_password: ididnotreadtheinstructions
 eramba_db: ididnotreadtheinstructions
 timezone: Europe/Amsterdam
