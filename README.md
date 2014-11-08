@@ -7,7 +7,7 @@ It expects you to have downloaded Eramba from the website, so there should be
 a zip file named `eramba_v2.zip` in the root directory of this Git repository.
 
 In case you don't feel like installing Ansible just for running this one
-instance of `vagrant up`. there's a shell script which can also be used
+instance of `vagrant up`, there's a shell script which can also be used
 for provisioning, provided you edit the Vagrantfile accordingly. Note that the
 shell script lacks the setting up of the cron tasks.
 
